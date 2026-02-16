@@ -39,6 +39,15 @@ class JellyfinClient:
                 else:
                     raise JellyfinError(f"Failed after {retries} attempts: {e}") from e
 
+    @staticmethod
+    def _items(data) -> list[dict]:
+        """Extract items list from a response that may be a list or {Items: [...]}."""
+        if isinstance(data, list):
+            return data
+        if isinstance(data, dict):
+            return self._items(data)
+        return []
+
     def _post(self, path: str, params: Optional[dict] = None) -> Optional[dict]:
         url = f"{self.server_url}{path}"
         try:
@@ -71,12 +80,13 @@ class JellyfinClient:
         """Find the TV library (collection type 'tvshows') ID."""
         uid = self.get_user_id()
         data = self._get(f"/Users/{uid}/Views")
-        for item in data.get("Items", []):
+        items = self._items(data)
+        for item in items:
             if item.get("CollectionType") == "tvshows":
                 logger.info("Found TV library: %s (%s)", item["Name"], item["Id"])
                 return item["Id"]
         raise JellyfinError("No TV library found. Available libraries: " +
-                            ", ".join(f"{i['Name']}({i.get('CollectionType', '?')})" for i in data.get("Items", [])))
+                            ", ".join(f"{i['Name']}({i.get('CollectionType', '?')})" for i in items))
 
     def get_all_shows(self, library_id: Optional[str] = None) -> list[dict]:
         """Get all TV shows from the library."""
@@ -92,7 +102,7 @@ class JellyfinClient:
             "SortBy": "SortName",
             "SortOrder": "Ascending",
         })
-        return data.get("Items", [])
+        return self._items(data)
 
     def get_seasons(self, show_id: str) -> list[dict]:
         """Get all seasons for a show."""
@@ -101,7 +111,7 @@ class JellyfinClient:
             "UserId": uid,
             "Fields": "Path,IndexNumber",
         })
-        return data.get("Items", [])
+        return self._items(data)
 
     def get_episodes(self, show_id: str, season_id: Optional[str] = None) -> list[dict]:
         """Get all episodes for a show, optionally filtered by season."""
@@ -114,7 +124,7 @@ class JellyfinClient:
         if season_id:
             params["SeasonId"] = season_id
         data = self._get(f"/Shows/{show_id}/Episodes", params=params)
-        return data.get("Items", [])
+        return self._items(data)
 
     def get_image_url(self, item_id: str, image_type: str = "Primary",
                       max_width: int = 300) -> str:
