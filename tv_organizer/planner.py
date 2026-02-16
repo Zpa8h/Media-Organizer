@@ -23,25 +23,13 @@ class PlannedMove:
     episode_number: int
     classification: str
     is_associated: bool = False  # True for subtitle/nfo companion files
+    same_root: bool = False  # Source is under the destination's library root
     issue: str = ""  # Warning text if any
 
     @property
     def already_correct(self) -> bool:
         """Check if the file is already in its correct location."""
         return _paths_equal(self.source, self.destination)
-
-    @property
-    def same_root(self) -> bool:
-        """Check if source and destination share the same root directory."""
-        src = Path(self.source).resolve()
-        dst = Path(self.destination).resolve()
-        # Check if they share the first two components (e.g., /TV)
-        try:
-            src_root = Path(src.parts[0], src.parts[1]) if len(src.parts) > 1 else src
-            dst_root = Path(dst.parts[0], dst.parts[1]) if len(dst.parts) > 1 else dst
-            return src_root == dst_root
-        except IndexError:
-            return False
 
 
 @dataclass
@@ -190,6 +178,8 @@ def generate_plan(db: Database, kids_dest: str, adults_dest: str,
 
             local_path = _remap_path(ep.path, jellyfin_root, source_dir)
             dest = build_destination_path(ep, show, dest_root)
+            # Source is under the destination root (reorganizing within same tree)
+            is_same_root = local_path.startswith(dest_root.rstrip("/") + "/")
             move = PlannedMove(
                 episode_id=ep.jellyfin_id,
                 show_id=show.jellyfin_id,
@@ -199,6 +189,7 @@ def generate_plan(db: Database, kids_dest: str, adults_dest: str,
                 season_number=ep.season_number,
                 episode_number=ep.episode_number,
                 classification=show.classification.value,
+                same_root=is_same_root,
             )
 
             # Check for issues
@@ -237,6 +228,7 @@ def generate_plan(db: Database, kids_dest: str, adults_dest: str,
                     episode_number=ep.episode_number,
                     classification=show.classification.value,
                     is_associated=True,
+                    same_root=is_same_root,
                 )
                 if assoc_move.already_correct:
                     plan.skipped.append(assoc_move)
