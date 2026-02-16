@@ -30,17 +30,25 @@ class Config:
     def from_env(cls) -> "Config":
         """Load configuration from environment variables."""
         return cls(
-            jellyfin_url=os.environ.get("JELLYFIN_URL", ""),
-            jellyfin_api_key=os.environ.get("JELLYFIN_API_KEY", ""),
-            jellyfin_user_id=os.environ.get("JELLYFIN_USER_ID", ""),
-            source_dir=os.environ.get("SOURCE_DIR", "/TV"),
-            kids_dest=os.environ.get("KIDS_DEST", "/tv-kids"),
-            adults_dest=os.environ.get("ADULTS_DEST", "/TV"),
-            db_path=os.environ.get("ORGANIZER_DB", "organizer.db"),
-            host=os.environ.get("HOST", "0.0.0.0"),
-            port=int(os.environ.get("PORT", "5000")),
-            debug=os.environ.get("DEBUG", "").lower() in ("1", "true", "yes"),
+            jellyfin_url=_clean_env("JELLYFIN_URL", ""),
+            jellyfin_api_key=_clean_env("JELLYFIN_API_KEY", ""),
+            jellyfin_user_id=_clean_env("JELLYFIN_USER_ID", ""),
+            source_dir=_clean_env("SOURCE_DIR", "/TV"),
+            kids_dest=_clean_env("KIDS_DEST", "/tv-kids"),
+            adults_dest=_clean_env("ADULTS_DEST", "/TV"),
+            db_path=_clean_env("ORGANIZER_DB", "organizer.db"),
+            host=_clean_env("HOST", "0.0.0.0"),
+            port=int(_clean_env("PORT", "5000")),
+            debug=_clean_env("DEBUG", "").lower() in ("1", "true", "yes"),
         )
+
+
+def _clean_env(key: str, default: str = "") -> str:
+    """Read an env var, stripping whitespace and inline comments."""
+    val = os.environ.get(key, default).strip()
+    if val.startswith("#"):
+        return default
+    return val
 
     def validate(self) -> list[str]:
         """Return a list of configuration errors."""
