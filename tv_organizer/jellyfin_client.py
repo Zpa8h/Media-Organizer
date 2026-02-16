@@ -45,7 +45,7 @@ class JellyfinClient:
         if isinstance(data, list):
             return data
         if isinstance(data, dict):
-            return self._items(data)
+            return data.get("Items", [])
         return []
 
     def _post(self, path: str, params: Optional[dict] = None) -> Optional[dict]:
@@ -76,32 +76,62 @@ class JellyfinClient:
         logger.info("Using user: %s (%s)", data[0]["Name"], self.user_id)
         return self.user_id
 
-    def get_tv_library_id(self) -> str:
-        """Find the TV library (collection type 'tvshows') ID."""
-        uid = self.get_user_id()
-        data = self._get(f"/Users/{uid}/Views")
-        items = self._items(data)
-        for item in items:
-            if item.get("CollectionType") == "tvshows":
-                logger.info("Found TV library: %s (%s)", item["Name"], item["Id"])
-                return item["Id"]
-        raise JellyfinError("No TV library found. Available libraries: " +
-                            ", ".join(f"{i['Name']}({i.get('CollectionType', '?')})" for i in items))
+    def get_tv_library_id(self) -> Optional[str]:
+        """Find the TV library (collection type 'tvshows') ID.
+
+        Tries /Library/VirtualFolders first (server-level, no user ID needed),
+        then falls back to /Users/{uid}/Views. Returns None if not found
+        (get_all_shows will query globally instead).
+        """
+        # Method 1: /Library/VirtualFolders (server-level, most reliable)
+        try:
+            data = self._get("/Library/VirtualFolders")
+            folders = data if isinstance(data, list) else []
+            for folder in folders:
+                if folder.get("CollectionType") == "tvshows":
+                    item_id = folder.get("ItemId", "")
+                    logger.info("Found TV library via VirtualFolders: %s (%s)",
+                                folder.get("Name"), item_id)
+                    return item_id
+            logger.debug("VirtualFolders available: %s",
+                         ", ".join(f"{f.get('Name')}({f.get('CollectionType', '?')})" for f in folders))
+        except JellyfinError as e:
+            logger.debug("VirtualFolders lookup failed: %s", e)
+
+        # Method 2: /Users/{uid}/Views (user-level)
+        try:
+            uid = self.get_user_id()
+            data = self._get(f"/Users/{uid}/Views")
+            items = self._items(data)
+            for item in items:
+                if item.get("CollectionType") == "tvshows":
+                    logger.info("Found TV library via Views: %s (%s)",
+                                item["Name"], item["Id"])
+                    return item["Id"]
+            logger.debug("Views available: %s",
+                         ", ".join(f"{i.get('Name')}({i.get('CollectionType', '?')})" for i in items))
+        except JellyfinError as e:
+            logger.debug("Views lookup failed: %s", e)
+
+        logger.warning("Could not find TV library ID, will query all Series globally")
+        return None
 
     def get_all_shows(self, library_id: Optional[str] = None) -> list[dict]:
         """Get all TV shows from the library."""
-        if not library_id:
+        if library_id is None:
             library_id = self.get_tv_library_id()
         uid = self.get_user_id()
-        data = self._get(f"/Users/{uid}/Items", params={
-            "ParentId": library_id,
+        params = {
             "IncludeItemTypes": "Series",
             "Recursive": "true",
             "Fields": "Path,OfficialRating,Genres,Tags,Studios,Overview,"
                       "ProductionYear,ProviderIds,ImageTags,CommunityRating",
             "SortBy": "SortName",
             "SortOrder": "Ascending",
-        })
+        }
+        if library_id:
+            params["ParentId"] = library_id
+        data = self._get(f"/Users/{uid}/Items", params=params)
         return self._items(data)
 
     def get_seasons(self, show_id: str) -> list[dict]:
