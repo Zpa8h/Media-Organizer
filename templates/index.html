@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+{% block title %}Dashboard - TV Organizer{% endblock %}
+{% block content %}
+<h1 class="text-2xl font-bold mb-6">Dashboard</h1>
+
+{% if errors %}
+<div class="bg-red-900/50 border border-red-700 rounded-lg p-4 mb-6">
+    <h2 class="font-bold text-red-300 mb-2">Configuration Errors</h2>
+    <ul class="list-disc list-inside text-red-400 text-sm">
+        {% for e in errors %}<li>{{ e }}</li>{% endfor %}
+    </ul>
+    <p class="text-sm text-red-400 mt-2">Set these environment variables and restart.</p>
+</div>
+{% endif %}
+
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="card">
+        <div class="text-sm text-gray-400">Total Shows</div>
+        <div class="text-3xl font-bold">{{ stats.total }}</div>
+    </div>
+    <div class="card">
+        <div class="text-sm text-green-400">Kids</div>
+        <div class="text-3xl font-bold text-green-400">{{ stats.kids }}</div>
+    </div>
+    <div class="card">
+        <div class="text-sm text-red-400">Adults</div>
+        <div class="text-3xl font-bold text-red-400">{{ stats.adults }}</div>
+    </div>
+    <div class="card">
+        <div class="text-sm text-yellow-400">Unclassified</div>
+        <div class="text-3xl font-bold text-yellow-400">{{ stats.unclassified }}</div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+    <div class="card">
+        <h2 class="font-bold mb-3">Jellyfin Connection</h2>
+        <p class="text-sm text-gray-400 mb-2">Server: {{ config.jellyfin_url or 'Not configured' }}</p>
+        <div class="flex gap-2">
+            <button onclick="testConnection()" class="btn btn-sm btn-secondary" id="test-btn">Test Connection</button>
+            <button onclick="syncLibrary()" class="btn btn-sm btn-primary" id="sync-btn">Sync Library</button>
+        </div>
+        <p id="connection-status" class="text-sm mt-2"></p>
+    </div>
+    <div class="card">
+        <h2 class="font-bold mb-3">Destination Paths</h2>
+        <p class="text-sm text-gray-400">Kids: <code class="text-green-400">{{ config.kids_dest }}</code></p>
+        <p class="text-sm text-gray-400">Adults: <code class="text-red-400">{{ config.adults_dest }}</code></p>
+        <p class="text-sm text-gray-400 mt-2">Last sync: {{ last_sync }}</p>
+    </div>
+</div>
+
+{% if stats.total > 0 %}
+<div class="card mb-6">
+    <h2 class="font-bold mb-3">Quick Actions</h2>
+    <div class="flex flex-wrap gap-2">
+        <a href="/shows" class="btn btn-sm btn-primary">Classify Shows</a>
+        <button onclick="autoClassify()" class="btn btn-sm btn-success">Auto-Classify by Rating/Genre</button>
+        <a href="/preview" class="btn btn-sm btn-warning">Preview Moves</a>
+    </div>
+    <p id="auto-status" class="text-sm mt-2"></p>
+</div>
+
+<div class="card">
+    <h2 class="font-bold mb-3">Classification Progress</h2>
+    {% set classified = stats.kids + stats.adults + stats.skip %}
+    {% set pct = (classified / stats.total * 100) | int if stats.total > 0 else 0 %}
+    <div class="w-full bg-gray-700 rounded-full h-4 mb-2">
+        <div class="h-4 rounded-full bg-gradient-to-r from-green-500 to-blue-500" style="width: {{ pct }}%"></div>
+    </div>
+    <p class="text-sm text-gray-400">{{ classified }} / {{ stats.total }} shows classified ({{ pct }}%)</p>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function testConnection() {
+    const el = document.getElementById('connection-status');
+    const btn = document.getElementById('test-btn');
+    btn.disabled = true;
+    el.textContent = 'Testing...';
+    el.className = 'text-sm mt-2 text-gray-400';
+    try {
+        const resp = await fetch('/api/test-connection');
+        const data = await resp.json();
+        if (data.ok) {
+            el.textContent = `Connected to ${data.server} (v${data.version})`;
+            el.className = 'text-sm mt-2 text-green-400';
+        } else {
+            el.textContent = `Error: ${data.error}`;
+            el.className = 'text-sm mt-2 text-red-400';
+        }
+    } catch (e) {
+        el.textContent = `Network error: ${e.message}`;
+        el.className = 'text-sm mt-2 text-red-400';
+    }
+    btn.disabled = false;
+}
+
+async function syncLibrary() {
+    const el = document.getElementById('connection-status');
+    const btn = document.getElementById('sync-btn');
+    btn.disabled = true;
+    el.textContent = 'Syncing... (this may take a while)';
+    el.className = 'text-sm mt-2 text-yellow-400';
+    try {
+        const resp = await fetch('/api/sync', { method: 'POST' });
+        const data = await resp.json();
+        if (data.ok) {
+            el.textContent = `Synced: ${data.stats.shows} shows, ${data.stats.episodes} episodes`;
+            el.className = 'text-sm mt-2 text-green-400';
+            setTimeout(() => location.reload(), 1500);
+        } else {
+            el.textContent = `Error: ${data.error}`;
+            el.className = 'text-sm mt-2 text-red-400';
+        }
+    } catch (e) {
+        el.textContent = `Network error: ${e.message}`;
+        el.className = 'text-sm mt-2 text-red-400';
+    }
+    btn.disabled = false;
+}
+
+async function autoClassify() {
+    const el = document.getElementById('auto-status');
+    try {
+        const resp = await fetch('/api/auto-classify', { method: 'POST' });
+        const data = await resp.json();
+        if (data.ok) {
+            const c = data.counts;
+            el.textContent = `Auto-classified: ${c.kids} kids, ${c.adults} adults, ${c.uncertain} uncertain`;
+            el.className = 'text-sm mt-2 text-green-400';
+            setTimeout(() => location.reload(), 1500);
+        }
+    } catch (e) {
+        el.textContent = `Error: ${e.message}`;
+        el.className = 'text-sm mt-2 text-red-400';
+    }
+}
+</script>
+{% endblock %}

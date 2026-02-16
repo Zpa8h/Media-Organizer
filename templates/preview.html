@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+{% block title %}Preview - TV Organizer{% endblock %}
+{% block content %}
+<h1 class="text-2xl font-bold mb-6">Move Preview</h1>
+
+{% if stats.unclassified > 0 %}
+<div class="bg-yellow-900/50 border border-yellow-700 rounded-lg p-4 mb-6">
+    <p class="text-yellow-300">{{ stats.unclassified }} show{{ 's' if stats.unclassified != 1 }} still unclassified.
+    <a href="/shows?classification=unclassified" class="underline">Classify them first</a> or they will be skipped.</p>
+</div>
+{% endif %}
+
+<!-- Summary -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    <div class="card">
+        <div class="text-sm text-gray-400">Files to Move</div>
+        <div class="text-2xl font-bold">{{ plan.total_moves }}</div>
+    </div>
+    <div class="card">
+        <div class="text-sm text-gray-400">Already Correct</div>
+        <div class="text-2xl font-bold text-green-400">{{ plan.total_skipped }}</div>
+    </div>
+    <div class="card">
+        <div class="text-sm text-gray-400">Same-Root Moves</div>
+        <div class="text-2xl font-bold text-yellow-400">{{ plan.same_root_moves | length }}</div>
+    </div>
+    <div class="card">
+        <div class="text-sm text-gray-400">Issues</div>
+        <div class="text-2xl font-bold text-red-400">{{ plan.issues | length }}</div>
+    </div>
+</div>
+
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    <div class="card">
+        <div class="text-sm text-green-400">Kids Shows</div>
+        <div class="text-xl font-bold">{{ plan.stats.kids }}</div>
+    </div>
+    <div class="card">
+        <div class="text-sm text-red-400">Adult Shows</div>
+        <div class="text-xl font-bold">{{ plan.stats.adults }}</div>
+    </div>
+    <div class="card">
+        <div class="text-sm text-gray-400">Skipped Shows</div>
+        <div class="text-xl font-bold">{{ plan.stats.skip }}</div>
+    </div>
+    <div class="card">
+        <div class="text-sm text-yellow-400">Unclassified</div>
+        <div class="text-xl font-bold">{{ plan.stats.unclassified }}</div>
+    </div>
+</div>
+
+{% if plan.same_root_moves | length > 0 %}
+<div class="bg-yellow-900/50 border border-yellow-700 rounded-lg p-4 mb-6">
+    <h3 class="font-bold text-yellow-300 mb-1">Same-Root Directory Moves</h3>
+    <p class="text-sm text-yellow-400">{{ plan.same_root_moves | length }} file(s) will move within the same root directory. These will use a temporary staging area to prevent data loss.</p>
+</div>
+{% endif %}
+
+{% if plan.issues %}
+<div class="card mb-6">
+    <h2 class="font-bold text-red-400 mb-3">Issues ({{ plan.issues | length }})</h2>
+    <div class="space-y-1 max-h-64 overflow-y-auto">
+        {% for move in plan.issues %}
+        <div class="text-sm py-1 border-b border-gray-700">
+            <span class="text-gray-300">{{ move.show_name }}</span>
+            <span class="text-gray-500">S{{ "%02d" | format(move.season_number) }}E{{ "%02d" | format(move.episode_number) }}</span>
+            <span class="text-red-400 text-xs ml-2">{{ move.issue }}</span>
+            {% if move.source %}
+            <div class="text-xs text-gray-500 mt-0.5">{{ move.source }}</div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+{% if plan.moves %}
+<div class="card mb-6">
+    <div class="flex items-center justify-between mb-3">
+        <h2 class="font-bold">Planned Moves ({{ plan.moves | length }})</h2>
+        <div class="flex gap-2 text-sm">
+            <button onclick="toggleView('kids')" class="btn btn-sm btn-success">Kids Only</button>
+            <button onclick="toggleView('adults')" class="btn btn-sm btn-danger">Adults Only</button>
+            <button onclick="toggleView('all')" class="btn btn-sm btn-secondary">All</button>
+        </div>
+    </div>
+    <div class="space-y-1 max-h-96 overflow-y-auto" id="moves-list">
+        {% for move in plan.moves %}
+        <div class="text-sm py-2 border-b border-gray-700 move-item" data-classification="{{ move.classification }}">
+            <div class="flex items-center gap-2">
+                <span class="badge badge-{{ move.classification }}">{{ move.classification[:1] | upper }}</span>
+                <span class="font-medium text-gray-200">{{ move.show_name }}</span>
+                <span class="text-gray-500">S{{ "%02d" | format(move.season_number) }}E{{ "%02d" | format(move.episode_number) }}</span>
+                {% if move.is_associated %}<span class="badge bg-gray-700 text-gray-400">companion</span>{% endif %}
+                {% if move.same_root %}<span class="badge bg-yellow-900 text-yellow-300">same-root</span>{% endif %}
+            </div>
+            <div class="text-xs text-gray-500 mt-1 ml-6">
+                <span class="text-red-400">FROM:</span> {{ move.source }}<br>
+                <span class="text-green-400">TO:</span>&nbsp;&nbsp;&nbsp;&nbsp; {{ move.destination }}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<!-- Execute buttons -->
+<div class="card">
+    <h2 class="font-bold mb-3">Execute</h2>
+    <div class="flex gap-3">
+        <form method="POST" action="/execute" class="inline">
+            <input type="hidden" name="dry_run" value="true">
+            <button type="submit" class="btn btn-warning">Dry Run (Safe Preview)</button>
+        </form>
+        <form method="POST" action="/execute" class="inline" onsubmit="return confirm('This will move {{ plan.total_moves }} files. Are you sure?')">
+            <input type="hidden" name="dry_run" value="false">
+            <button type="submit" class="btn btn-danger">Execute Moves</button>
+        </form>
+    </div>
+    <p class="text-sm text-gray-500 mt-2">Dry run will log what would happen without moving any files.</p>
+</div>
+{% else %}
+<div class="card">
+    <p class="text-gray-400">No moves to perform. Either all files are already in the correct location, or no shows have been classified yet.</p>
+    <a href="/shows" class="btn btn-sm btn-primary mt-3">Go to Classification</a>
+</div>
+{% endif %}
+
+{% if plan.skipped %}
+<div class="card mt-6">
+    <h2 class="font-bold text-green-400 mb-3">Already Correct ({{ plan.skipped | length }})</h2>
+    <div class="space-y-1 max-h-48 overflow-y-auto">
+        {% for move in plan.skipped[:50] %}
+        <div class="text-xs text-gray-500 py-0.5">
+            {{ move.show_name }} S{{ "%02d" | format(move.season_number) }}E{{ "%02d" | format(move.episode_number) }} &mdash; {{ move.destination }}
+        </div>
+        {% endfor %}
+        {% if plan.skipped | length > 50 %}
+        <p class="text-xs text-gray-600">... and {{ plan.skipped | length - 50 }} more</p>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+function toggleView(classification) {
+    document.querySelectorAll('.move-item').forEach(el => {
+        if (classification === 'all') {
+            el.style.display = '';
+        } else {
+            el.style.display = el.dataset.classification === classification ? '' : 'none';
+        }
+    });
+}
+</script>
+{% endblock %}

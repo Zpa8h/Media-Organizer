@@ -1,0 +1,197 @@
+{% extends "base.html" %}
+{% block title %}Shows - TV Organizer{% endblock %}
+{% block content %}
+<div class="flex items-center justify-between mb-6">
+    <h1 class="text-2xl font-bold">TV Shows ({{ shows | length }})</h1>
+    <div class="flex gap-2">
+        <button onclick="autoClassify()" class="btn btn-sm btn-success">Auto-Classify All</button>
+        <button onclick="classifySelected()" class="btn btn-sm btn-primary" id="bulk-btn" disabled>Classify Selected</button>
+    </div>
+</div>
+
+<!-- Stats bar -->
+<div class="flex gap-4 mb-4 text-sm">
+    <span class="badge badge-kids">Kids: {{ stats.kids }}</span>
+    <span class="badge badge-adults">Adults: {{ stats.adults }}</span>
+    <span class="badge badge-skip">Skip: {{ stats.skip }}</span>
+    <span class="badge badge-unclassified">Unclassified: {{ stats.unclassified }}</span>
+</div>
+
+<!-- Filters -->
+<div class="card mb-4">
+    <form method="GET" class="flex flex-wrap gap-3 items-end">
+        <div>
+            <label class="block text-xs text-gray-400 mb-1">Search</label>
+            <input type="text" name="q" value="{{ q }}" placeholder="Show name..."
+                   class="bg-gray-700 border border-gray-600 rounded px-3 py-1.5 text-sm text-white w-48">
+        </div>
+        <div>
+            <label class="block text-xs text-gray-400 mb-1">Classification</label>
+            <select name="classification" class="bg-gray-700 border border-gray-600 rounded px-3 py-1.5 text-sm text-white">
+                <option value="">All</option>
+                <option value="unclassified" {{ 'selected' if classification_filter == 'unclassified' }}>Unclassified</option>
+                <option value="kids" {{ 'selected' if classification_filter == 'kids' }}>Kids</option>
+                <option value="adults" {{ 'selected' if classification_filter == 'adults' }}>Adults</option>
+                <option value="skip" {{ 'selected' if classification_filter == 'skip' }}>Skip</option>
+            </select>
+        </div>
+        <div>
+            <label class="block text-xs text-gray-400 mb-1">Rating</label>
+            <select name="rating" class="bg-gray-700 border border-gray-600 rounded px-3 py-1.5 text-sm text-white">
+                <option value="">All</option>
+                {% for r in all_ratings %}
+                <option value="{{ r }}" {{ 'selected' if rating_filter == r }}>{{ r }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <button type="submit" class="btn btn-sm btn-secondary">Filter</button>
+        <a href="/shows" class="btn btn-sm btn-secondary">Clear</a>
+    </form>
+</div>
+
+<!-- Bulk classification by rating/genre -->
+<div class="card mb-4">
+    <h3 class="font-bold text-sm mb-2">Bulk Classify by Pattern</h3>
+    <div class="flex flex-wrap gap-2">
+        <button onclick="classifyByRating(['TV-Y','TV-Y7','TV-Y7-FV','TV-G','G'], 'kids')"
+                class="btn btn-sm btn-success">TV-Y/G &rarr; Kids</button>
+        <button onclick="classifyByRating(['TV-14','TV-MA','R'], 'adults')"
+                class="btn btn-sm btn-danger">TV-14/MA &rarr; Adults</button>
+        {% for genre in all_genres %}
+        {% if genre in ['Kids', 'Children', 'Animation', 'Family'] %}
+        <button onclick="classifyByGenre('{{ genre }}', 'kids')"
+                class="btn btn-sm btn-success">{{ genre }} &rarr; Kids</button>
+        {% endif %}
+        {% endfor %}
+    </div>
+    <p id="bulk-status" class="text-sm mt-2"></p>
+</div>
+
+<!-- Show list -->
+<div class="space-y-2" id="show-list">
+    {% for show in shows %}
+    <div class="card flex items-center gap-4 show-card" data-id="{{ show.jellyfin_id }}">
+        <input type="checkbox" class="show-checkbox w-4 h-4" value="{{ show.jellyfin_id }}"
+               onchange="updateBulkButton()">
+        <a href="/api/image/{{ show.jellyfin_id }}" class="flex-shrink-0">
+            <img src="/api/image/{{ show.jellyfin_id }}?maxWidth=60" alt=""
+                 class="w-10 h-14 object-cover rounded bg-gray-700"
+                 onerror="this.style.display='none'">
+        </a>
+        <div class="flex-1 min-w-0">
+            <a href="/shows/{{ show.jellyfin_id }}" class="font-medium hover:text-blue-400">
+                {{ show.name }}{% if show.year %} ({{ show.year }}){% endif %}
+            </a>
+            <div class="flex gap-2 text-xs text-gray-400 mt-0.5">
+                <span>{{ show.season_count }} season{{ 's' if show.season_count != 1 }}</span>
+                <span>{{ show.episode_count }} episode{{ 's' if show.episode_count != 1 }}</span>
+                {% if show.official_rating %}<span class="text-gray-500">{{ show.official_rating }}</span>{% endif %}
+                {% for g in show.genres[:3] %}<span class="text-gray-500">{{ g }}</span>{% endfor %}
+            </div>
+        </div>
+        {% if show.jellyfin_id in suggestions %}
+        <span class="text-xs text-gray-500">Suggested: {{ suggestions[show.jellyfin_id] }}</span>
+        {% endif %}
+        <div class="flex gap-1.5">
+            <button onclick="classify('{{ show.jellyfin_id }}', 'kids', this)"
+                    class="btn btn-sm {{ 'btn-success' if show.classification.value == 'kids' else 'bg-gray-700 text-gray-400 hover:bg-green-800' }}">
+                Kids</button>
+            <button onclick="classify('{{ show.jellyfin_id }}', 'adults', this)"
+                    class="btn btn-sm {{ 'btn-danger' if show.classification.value == 'adults' else 'bg-gray-700 text-gray-400 hover:bg-red-800' }}">
+                Adults</button>
+            <button onclick="classify('{{ show.jellyfin_id }}', 'skip', this)"
+                    class="btn btn-sm {{ 'bg-gray-500 text-white' if show.classification.value == 'skip' else 'bg-gray-700 text-gray-400 hover:bg-gray-600' }}">
+                Skip</button>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function classify(showId, classification, btn) {
+    try {
+        const resp = await fetch('/api/classify', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({show_id: showId, classification: classification})
+        });
+        const data = await resp.json();
+        if (data.ok) {
+            // Update button states in the row
+            const card = btn.closest('.show-card');
+            const buttons = card.querySelectorAll('.btn');
+            buttons.forEach(b => {
+                b.className = b.className.replace(/btn-success|btn-danger|bg-gray-500 text-white/g, 'bg-gray-700 text-gray-400');
+            });
+            if (classification === 'kids') btn.className = 'btn btn-sm btn-success';
+            else if (classification === 'adults') btn.className = 'btn btn-sm btn-danger';
+            else btn.className = 'btn btn-sm bg-gray-500 text-white';
+        }
+    } catch (e) {
+        console.error(e);
+    }
+}
+
+async function autoClassify() {
+    const resp = await fetch('/api/auto-classify', { method: 'POST' });
+    const data = await resp.json();
+    if (data.ok) {
+        location.reload();
+    }
+}
+
+function updateBulkButton() {
+    const checked = document.querySelectorAll('.show-checkbox:checked');
+    document.getElementById('bulk-btn').disabled = checked.length === 0;
+}
+
+async function classifySelected() {
+    const checked = document.querySelectorAll('.show-checkbox:checked');
+    const ids = Array.from(checked).map(c => c.value);
+    if (ids.length === 0) return;
+
+    const classification = prompt('Classify as: kids, adults, or skip');
+    if (!classification || !['kids', 'adults', 'skip'].includes(classification)) return;
+
+    const resp = await fetch('/api/classify-bulk', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({show_ids: ids, classification: classification})
+    });
+    const data = await resp.json();
+    if (data.ok) location.reload();
+}
+
+async function classifyByRating(ratings, classification) {
+    const el = document.getElementById('bulk-status');
+    const resp = await fetch('/api/classify-by-rating', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ratings, classification})
+    });
+    const data = await resp.json();
+    if (data.ok) {
+        el.textContent = `Classified ${data.count} shows`;
+        el.className = 'text-sm mt-2 text-green-400';
+        if (data.count > 0) setTimeout(() => location.reload(), 1000);
+    }
+}
+
+async function classifyByGenre(genre, classification) {
+    const el = document.getElementById('bulk-status');
+    const resp = await fetch('/api/classify-by-genre', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({genre, classification})
+    });
+    const data = await resp.json();
+    if (data.ok) {
+        el.textContent = `Classified ${data.count} shows`;
+        el.className = 'text-sm mt-2 text-green-400';
+        if (data.count > 0) setTimeout(() => location.reload(), 1000);
+    }
+}
+</script>
+{% endblock %}

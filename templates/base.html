@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-gray-900">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}TV Organizer{% endblock %}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .card { @apply bg-gray-800 rounded-lg border border-gray-700 p-4; }
+        .btn { @apply px-4 py-2 rounded-lg font-medium transition-colors cursor-pointer inline-flex items-center gap-2; }
+        .btn-primary { @apply bg-blue-600 text-white hover:bg-blue-700; }
+        .btn-success { @apply bg-green-600 text-white hover:bg-green-700; }
+        .btn-warning { @apply bg-yellow-600 text-white hover:bg-yellow-700; }
+        .btn-danger { @apply bg-red-600 text-white hover:bg-red-700; }
+        .btn-secondary { @apply bg-gray-600 text-white hover:bg-gray-500; }
+        .btn-sm { @apply px-3 py-1 text-sm; }
+        .badge { @apply inline-block px-2 py-0.5 rounded text-xs font-medium; }
+        .badge-kids { @apply bg-green-900 text-green-300 border border-green-700; }
+        .badge-adults { @apply bg-red-900 text-red-300 border border-red-700; }
+        .badge-skip { @apply bg-gray-700 text-gray-300 border border-gray-600; }
+        .badge-unclassified { @apply bg-yellow-900 text-yellow-300 border border-yellow-700; }
+    </style>
+</head>
+<body class="h-full text-gray-100">
+    <nav class="bg-gray-800 border-b border-gray-700">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-14">
+                <div class="flex items-center gap-6">
+                    <a href="/" class="text-lg font-bold text-white">TV Organizer</a>
+                    <div class="flex gap-4 text-sm">
+                        <a href="/" class="text-gray-300 hover:text-white">Dashboard</a>
+                        <a href="/shows" class="text-gray-300 hover:text-white">Shows</a>
+                        <a href="/preview" class="text-gray-300 hover:text-white">Preview</a>
+                        <a href="/log" class="text-gray-300 hover:text-white">Move Log</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        {% block content %}{% endblock %}
+    </main>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

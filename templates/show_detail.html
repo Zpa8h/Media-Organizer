@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}{{ show.name }} - TV Organizer{% endblock %}
+{% block content %}
+<div class="mb-4">
+    <a href="/shows" class="text-sm text-gray-400 hover:text-white">&larr; Back to shows</a>
+</div>
+
+<div class="card mb-6">
+    <div class="flex gap-6">
+        <img src="/api/image/{{ show.jellyfin_id }}?maxWidth=200" alt=""
+             class="w-32 h-48 object-cover rounded bg-gray-700 flex-shrink-0"
+             onerror="this.style.display='none'">
+        <div class="flex-1">
+            <h1 class="text-2xl font-bold">{{ show.name }}{% if show.year %} ({{ show.year }}){% endif %}</h1>
+            <div class="flex gap-2 mt-2">
+                <span class="badge badge-{{ show.classification.value }}">{{ show.classification.value | upper }}</span>
+                {% if show.official_rating %}
+                <span class="badge bg-gray-700 text-gray-300">{{ show.official_rating }}</span>
+                {% endif %}
+                {% for g in show.genres %}
+                <span class="badge bg-gray-700 text-gray-300">{{ g }}</span>
+                {% endfor %}
+            </div>
+            {% if show.overview %}
+            <p class="text-sm text-gray-400 mt-3 max-w-2xl">{{ show.overview[:300] }}{% if show.overview|length > 300 %}...{% endif %}</p>
+            {% endif %}
+            <div class="text-sm text-gray-400 mt-3">
+                <p>{{ show.season_count }} season{{ 's' if show.season_count != 1 }}, {{ show.episode_count }} episode{{ 's' if show.episode_count != 1 }}</p>
+                {% if show.community_rating %}<p>Rating: {{ "%.1f" | format(show.community_rating) }}/10</p>{% endif %}
+                {% if show.path %}<p class="text-xs text-gray-500 mt-1">Path: {{ show.path }}</p>{% endif %}
+            </div>
+
+            {% if suggestion %}
+            <p class="text-sm text-yellow-400 mt-3">Auto-suggestion: {{ suggestion.value }}</p>
+            {% endif %}
+
+            <div class="flex gap-2 mt-4">
+                <button onclick="classify('kids')"
+                        class="btn btn-sm {{ 'btn-success' if show.classification.value == 'kids' else 'btn-secondary' }}">Kids</button>
+                <button onclick="classify('adults')"
+                        class="btn btn-sm {{ 'btn-danger' if show.classification.value == 'adults' else 'btn-secondary' }}">Adults</button>
+                <button onclick="classify('skip')"
+                        class="btn btn-sm {{ 'bg-gray-500 text-white' if show.classification.value == 'skip' else 'btn-secondary' }}">Skip</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<h2 class="text-lg font-bold mb-3">Episodes</h2>
+<div class="space-y-1">
+    {% set ns = namespace(current_season=-1) %}
+    {% for ep in episodes %}
+    {% if ep.season_number != ns.current_season %}
+    {% set ns.current_season = ep.season_number %}
+    <h3 class="text-sm font-bold text-gray-300 mt-4 mb-2">Season {{ ep.season_number }}</h3>
+    {% endif %}
+    <div class="card py-2 px-4 flex items-center gap-3 text-sm">
+        <span class="text-gray-500 w-16">S{{ "%02d" | format(ep.season_number) }}E{{ "%02d" | format(ep.episode_number) }}</span>
+        <span class="flex-1">{{ ep.name }}</span>
+        <span class="text-xs text-gray-500 truncate max-w-md">{{ ep.path }}</span>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function classify(classification) {
+    const resp = await fetch('/api/classify', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({show_id: '{{ show.jellyfin_id }}', classification: classification})
+    });
+    if ((await resp.json()).ok) location.reload();
+}
+</script>
+{% endblock %}

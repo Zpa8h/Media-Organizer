@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}Results - TV Organizer{% endblock %}
+{% block content %}
+<h1 class="text-2xl font-bold mb-6">
+    {% if dry_run %}Dry Run Results{% else %}Execution Results{% endif %}
+</h1>
+
+{% if dry_run %}
+<div class="bg-blue-900/50 border border-blue-700 rounded-lg p-4 mb-6">
+    <p class="text-blue-300">This was a dry run. No files were actually moved.</p>
+</div>
+{% endif %}
+
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+    <div class="card">
+        <div class="text-sm text-green-400">Completed</div>
+        <div class="text-3xl font-bold text-green-400">{{ results.completed }}</div>
+    </div>
+    <div class="card">
+        <div class="text-sm text-red-400">Failed</div>
+        <div class="text-3xl font-bold text-red-400">{{ results.failed }}</div>
+    </div>
+    <div class="card">
+        <div class="text-sm text-gray-400">Skipped</div>
+        <div class="text-3xl font-bold">{{ results.skipped }}</div>
+    </div>
+</div>
+
+{% if results.errors %}
+<div class="card mb-6">
+    <h2 class="font-bold text-red-400 mb-3">Errors</h2>
+    <div class="space-y-2">
+        {% for err in results.errors %}
+        <div class="text-sm bg-red-900/30 rounded p-2">
+            <div class="text-red-300">{{ err.move }}</div>
+            <div class="text-red-400 text-xs">{{ err.error }}</div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+<div class="flex gap-3">
+    <a href="/preview" class="btn btn-secondary">Back to Preview</a>
+    <a href="/log" class="btn btn-secondary">View Move Log</a>
+    {% if not dry_run %}
+    <button onclick="triggerScan()" class="btn btn-primary" id="scan-btn">Trigger Jellyfin Library Scan</button>
+    <span id="scan-status" class="text-sm self-center"></span>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function triggerScan() {
+    const btn = document.getElementById('scan-btn');
+    const status = document.getElementById('scan-status');
+    btn.disabled = true;
+    status.textContent = 'Triggering scan...';
+    try {
+        const resp = await fetch('/api/trigger-scan', { method: 'POST' });
+        const data = await resp.json();
+        if (data.ok) {
+            status.textContent = 'Library scan triggered!';
+            status.className = 'text-sm self-center text-green-400';
+        } else {
+            status.textContent = 'Error: ' + data.error;
+            status.className = 'text-sm self-center text-red-400';
+        }
+    } catch (e) {
+        status.textContent = 'Error: ' + e.message;
+        status.className = 'text-sm self-center text-red-400';
+    }
+}
+</script>
+{% endblock %}
