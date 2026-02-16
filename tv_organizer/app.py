@@ -202,7 +202,7 @@ def create_app(config: Config = None) -> Flask:
     def preview():
         db = get_db()
         stats = db.get_classification_stats()
-        plan = generate_plan(db, config.kids_dest, config.adults_dest)
+        plan = generate_plan(db, config.kids_dest, config.adults_dest, config.source_dir)
         return render_template("preview.html", plan=plan, stats=stats, config=config)
 
     # ── Execute ────────────────────────────────────────────────────────
@@ -210,7 +210,7 @@ def create_app(config: Config = None) -> Flask:
     @app.route("/execute", methods=["POST"])
     def execute():
         db = get_db()
-        plan = generate_plan(db, config.kids_dest, config.adults_dest)
+        plan = generate_plan(db, config.kids_dest, config.adults_dest, config.source_dir)
 
         dry_run = request.form.get("dry_run", "true") == "true"
         results = execute_plan(plan, db, dry_run=dry_run)

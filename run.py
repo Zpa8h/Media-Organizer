@@ -59,7 +59,7 @@ def cmd_preview(args, config: Config):
     from tv_organizer.planner import generate_plan
 
     db = Database(config.db_path)
-    plan = generate_plan(db, config.kids_dest, config.adults_dest)
+    plan = generate_plan(db, config.kids_dest, config.adults_dest, config.source_dir)
 
     print(f"\nMove Plan Summary:")
     print(f"  Files to move:      {plan.total_moves}")
@@ -87,7 +87,7 @@ def cmd_execute(args, config: Config):
     from tv_organizer.planner import generate_plan
 
     db = Database(config.db_path)
-    plan = generate_plan(db, config.kids_dest, config.adults_dest)
+    plan = generate_plan(db, config.kids_dest, config.adults_dest, config.source_dir)
 
     dry_run = not args.for_real
 

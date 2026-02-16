@@ -110,19 +110,49 @@ def build_destination_path(episode: Episode, show: Show,
     return str(Path(dest_root) / show_folder / season_folder / filename)
 
 
-def generate_plan(db: Database, kids_dest: str, adults_dest: str) -> MovePlan:
+def _detect_jellyfin_root(shows: list[Show]) -> str:
+    """Detect the Jellyfin library root from show paths.
+
+    Shows have paths like /media/backup/TV/ShowName. The parent of any
+    show path is the Jellyfin library root.
+    """
+    for show in shows:
+        if show.path:
+            return str(Path(show.path).parent)
+    return ""
+
+
+def _remap_path(path: str, jellyfin_root: str, source_dir: str) -> str:
+    """Remap a Jellyfin-internal path to the local filesystem path."""
+    if not path or not jellyfin_root or not source_dir:
+        return path
+    if jellyfin_root == source_dir:
+        return path
+    if path.startswith(jellyfin_root):
+        return source_dir + path[len(jellyfin_root):]
+    return path
+
+
+def generate_plan(db: Database, kids_dest: str, adults_dest: str,
+                  source_dir: str = "") -> MovePlan:
     """Generate a complete move plan for all classified shows.
 
     Args:
         db: Database instance with shows/episodes loaded
         kids_dest: Root destination for kids content (e.g., /tv-kids)
         adults_dest: Root destination for adult content (e.g., /TV)
+        source_dir: Local filesystem path for the TV library (remaps Jellyfin paths)
 
     Returns:
         MovePlan with all moves, skips, and issues identified
     """
     plan = MovePlan()
     shows = db.get_all_shows()
+
+    # Detect Jellyfin's internal path prefix so we can remap to local paths
+    jellyfin_root = _detect_jellyfin_root(shows) if source_dir else ""
+    if jellyfin_root and source_dir and jellyfin_root != source_dir:
+        logger.info("Remapping Jellyfin paths: %s → %s", jellyfin_root, source_dir)
 
     show_counts = {"kids": 0, "adults": 0, "skip": 0, "unclassified": 0}
 
@@ -158,11 +188,12 @@ def generate_plan(db: Database, kids_dest: str, adults_dest: str) -> MovePlan:
                 ))
                 continue
 
+            local_path = _remap_path(ep.path, jellyfin_root, source_dir)
             dest = build_destination_path(ep, show, dest_root)
             move = PlannedMove(
                 episode_id=ep.jellyfin_id,
                 show_id=show.jellyfin_id,
-                source=ep.path,
+                source=local_path,
                 destination=dest,
                 show_name=show.name,
                 season_number=ep.season_number,
@@ -188,10 +219,10 @@ def generate_plan(db: Database, kids_dest: str, adults_dest: str) -> MovePlan:
             plan.moves.append(move)
 
             # Plan associated file moves
-            for assoc_path in find_associated_files(ep.path):
+            for assoc_path in find_associated_files(local_path):
                 assoc_filename = Path(assoc_path).name
                 # Preserve the suffix chain (e.g., .en.srt)
-                ep_stem = Path(ep.path).stem
+                ep_stem = Path(local_path).stem
                 assoc_suffix = Path(assoc_path).name[len(ep_stem):]
                 new_ep_stem = Path(dest).stem
                 assoc_dest = str(Path(dest).parent / f"{new_ep_stem}{assoc_suffix}")
