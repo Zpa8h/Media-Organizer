@@ -42,14 +42,6 @@ class Config:
             debug=_clean_env("DEBUG", "").lower() in ("1", "true", "yes"),
         )
 
-
-def _clean_env(key: str, default: str = "") -> str:
-    """Read an env var, stripping whitespace and inline comments."""
-    val = os.environ.get(key, default).strip()
-    if val.startswith("#"):
-        return default
-    return val
-
     def validate(self) -> list[str]:
         """Return a list of configuration errors."""
         errors = []
@@ -62,3 +54,11 @@ def _clean_env(key: str, default: str = "") -> str:
         if not self.adults_dest:
             errors.append("ADULTS_DEST is required")
         return errors
+
+
+def _clean_env(key: str, default: str = "") -> str:
+    """Read an env var, stripping whitespace and inline comments."""
+    val = os.environ.get(key, default).strip()
+    if val.startswith("#"):
+        return default
+    return val
